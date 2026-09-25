@@ -1,0 +1,41 @@
+# Python virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch checkpoints and model weights
+checkpoints/
+*.pth
+*.pt
+*.pwf
+
+# Dataset files and archives (large files)
+dataverse_files/
+dataverse_files.zip
+*.zip
+*.tar.gz
+*.csv.gz
+
+# Generated outputs, logs, and artifacts
+outputs/
+*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Operating System specific files
+.DS_Store
+Thumbs.db
+desktop.ini
