@@ -1,7 +1,8 @@
 """
 src/train.py
 Training pipeline with Adam optimizer, CrossEntropyLoss, and Callbacks:
-- Model Checkpoint (saves best weights based on val_loss)
+- Multi-GPU support via nn.DataParallel (e.g. Kaggle Dual T4 GPUs)
+- Model Checkpoint (saves unwrapped weights based on val_loss)
 - ReduceLROnPlateau (halves LR when val_loss plateaus)
 - Early Stopping (stops after patience epochs without improvement)
 - Learning curves visualization (plots Loss and Accuracy over epochs like Fig. 5 & 6)
@@ -50,10 +51,12 @@ class EarlyStopping:
             self.counter = 0
             self.best_epoch = epoch
             if self.checkpoint_path:
+                # Unwrap model if wrapped in DataParallel
+                model_to_save = model.module if hasattr(model, "module") else model
                 torch.save(
                     {
                         "epoch": epoch,
-                        "model_state_dict": model.state_dict(),
+                        "model_state_dict": model_to_save.state_dict(),
                         "val_loss": val_loss,
                     },
                     self.checkpoint_path,
@@ -139,7 +142,6 @@ def plot_training_history(history: dict, save_path: Path):
     ax1.grid(True, linestyle="--", alpha=0.6)
 
     # Accuracy curve
-    ax1.plot()
     ax2.plot(epochs_range, history["train_acc"], label="Training Accuracy", color="#2ca02c")
     ax2.plot(epochs_range, history["val_acc"], label="Validation Accuracy", color="#d62728")
     ax2.set_title("Training and Validation Accuracy per Epoch")
@@ -166,6 +168,7 @@ def train_model(
 ):
     """
     Main training function orchestrating:
+    - Multi-GPU DataParallel wrapping if available
     - Adam optimizer
     - CrossEntropyLoss
     - ReduceLROnPlateau scheduler
@@ -176,6 +179,12 @@ def train_model(
     best_checkpoint_path = checkpoint_dir / "best_model.pth"
 
     model = model.to(device)
+
+    # Support Multi-GPU (e.g. Dual T4 GPUs on Kaggle)
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+        print(f"[*] Multi-GPU: Detected {torch.cuda.device_count()} GPUs. Using nn.DataParallel!")
+        model = nn.DataParallel(model)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -203,7 +212,7 @@ def train_model(
     }
 
     print(f"\n================ Starting Training ================")
-    print(f"Device: {device} | Max Epochs: {epochs} | Initial LR: {lr}")
+    print(f"Device: {device} (Count: {torch.cuda.device_count()}) | Max Epochs: {epochs} | Initial LR: {lr}")
     print(f"Checkpoints directory: {best_checkpoint_path}")
     print(f"===================================================\n")
 

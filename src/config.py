@@ -7,11 +7,25 @@ Configuration file containing paths, hyperparameters, and class mappings based o
 from pathlib import Path
 import torch
 
-# Base directories
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "dataverse_files"
+# Compute Device & Multi-GPU
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+NUM_GPUS = torch.cuda.device_count()
 
-# Dataset paths
+# Auto-detect Kaggle environment
+KAGGLE_INPUT_DIR = Path("/kaggle/input")
+if KAGGLE_INPUT_DIR.exists():
+    # Running inside Kaggle
+    BASE_DIR = Path("/kaggle/working")
+    kaggle_datasets = list(KAGGLE_INPUT_DIR.glob("*ham10000*")) + list(KAGGLE_INPUT_DIR.glob("*skin*"))
+    if kaggle_datasets:
+        DATA_DIR = kaggle_datasets[0]
+    else:
+        DATA_DIR = KAGGLE_INPUT_DIR
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATA_DIR = BASE_DIR / "dataverse_files"
+
+# Dataset paths (fallback defaults; resolved dynamically in dataset.py)
 METADATA_PATH = DATA_DIR / "HAM10000_metadata"
 IMAGES_DIR_PART1 = DATA_DIR / "HAM10000_images_part_1"
 IMAGES_DIR_PART2 = DATA_DIR / "HAM10000_images_part_2"
@@ -66,6 +80,3 @@ CLASS_NAMES = [
 ]
 
 NUM_CLASSES = len(CLASS_MAPPING)
-
-# Compute Device
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

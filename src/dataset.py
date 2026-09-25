@@ -1,12 +1,7 @@
 """
 src/dataset.py
 Data preprocessing, class balancing, augmentation, and PyTorch Dataset / DataLoader creation.
-Follows the paper:
-- Downscales images to 28x28 RGB
-- Normalizes pixel values to [0, 1]
-- Imputes missing metadata
-- Performs stratified 80/10/10 train/val/test split
-- Augments training set to balance classes (~6,000 samples per class)
+Compatible with local and Kaggle environments.
 """
 
 from pathlib import Path
@@ -20,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
 from src.config import (
+    DATA_DIR,
     METADATA_PATH,
     IMAGES_DIR_PART1,
     IMAGES_DIR_PART2,
@@ -35,15 +31,59 @@ from src.config import (
 )
 
 
-def load_and_prepare_metadata(
-    metadata_path: Path = METADATA_PATH,
-    part1_dir: Path = IMAGES_DIR_PART1,
-    part2_dir: Path = IMAGES_DIR_PART2,
-) -> pd.DataFrame:
+def find_metadata_file(data_dir: Path) -> Path:
+    """Finds the metadata file whether named HAM10000_metadata or HAM10000_metadata.csv."""
+    candidates = [
+        data_dir / "HAM10000_metadata",
+        data_dir / "HAM10000_metadata.csv",
+        data_dir / "ham10000_metadata.csv",
+    ]
+    for c in candidates:
+        if c.exists() and c.is_file():
+            return c
+
+    # Search recursively for any CSV containing 'dx' column
+    for csv_file in data_dir.rglob("*.csv"):
+        try:
+            head = pd.read_csv(csv_file, nrows=2)
+            if "dx" in head.columns and "image_id" in head.columns:
+                return csv_file
+        except Exception:
+            continue
+
+    for raw_file in data_dir.rglob("*metadata*"):
+        if raw_file.is_file():
+            try:
+                head = pd.read_csv(raw_file, nrows=2)
+                if "dx" in head.columns and "image_id" in head.columns:
+                    return raw_file
+            except Exception:
+                continue
+
+    raise FileNotFoundError(f"Could not find HAM10000 metadata file in {data_dir}")
+
+
+def find_image_files(data_dir: Path) -> dict:
+    """Finds all images in data_dir and maps image stem (e.g. ISIC_0027419) to file path."""
+    image_paths = {}
+    valid_exts = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
+    for p in data_dir.rglob("*"):
+        if p.suffix in valid_exts and p.is_file():
+            image_paths[p.stem] = str(p)
+    return image_paths
+
+
+def load_and_prepare_metadata(data_dir: Path = None) -> pd.DataFrame:
     """
     Loads metadata, imputes missing values (e.g. age), maps image IDs to file paths,
     and maps diagnoses to numeric class labels.
     """
+    if data_dir is None:
+        data_dir = DATA_DIR
+
+    metadata_path = find_metadata_file(data_dir)
+    print(f"[*] Found metadata file: {metadata_path}")
+
     # 1. Read metadata
     df = pd.read_csv(metadata_path)
 
@@ -51,20 +91,14 @@ def load_and_prepare_metadata(
     df["age"] = df["age"].fillna(df["age"].mean())
 
     # 3. Map image_id to actual image file paths on disk
-    image_paths = {}
-    for ext in ("*.jpg", "*.jpeg", "*.png"):
-        for p in glob.glob(str(part1_dir / ext)):
-            stem = Path(p).stem
-            image_paths[stem] = p
-        for p in glob.glob(str(part2_dir / ext)):
-            stem = Path(p).stem
-            image_paths[stem] = p
+    image_paths = find_image_files(data_dir)
+    print(f"[*] Found {len(image_paths)} total images in {data_dir}")
 
     df["image_path"] = df["image_id"].map(image_paths)
     missing_paths = df["image_path"].isnull().sum()
     if missing_paths > 0:
         raise FileNotFoundError(
-            f"Could not find image files for {missing_paths} metadata entries."
+            f"Could not find image files for {missing_paths} out of {len(df)} metadata entries."
         )
 
     # 4. Map diagnoses strings to integer labels (0 to 6)
@@ -140,7 +174,6 @@ def balance_training_data(
             balanced_dfs.append(class_subset)
 
     balanced_df = pd.concat(balanced_dfs, ignore_index=True)
-    # Shuffle the balanced dataframe
     balanced_df = balanced_df.sample(
         frac=1.0, random_state=random_seed
     ).reset_index(drop=True)
@@ -202,6 +235,7 @@ def get_transforms():
 
 
 def get_dataloaders(
+    data_dir: Path = None,
     batch_size: int = BATCH_SIZE,
     balance_train: bool = True,
     num_workers: int = 0,
@@ -213,7 +247,7 @@ def get_dataloaders(
     3. Balances the train split using oversampling
     4. Builds PyTorch DataLoaders
     """
-    df = load_and_prepare_metadata()
+    df = load_and_prepare_metadata(data_dir=data_dir)
     train_df, val_df, test_df = split_data(df)
 
     if balance_train:
@@ -225,26 +259,28 @@ def get_dataloaders(
     val_dataset = HAM10000Dataset(val_df, transform=eval_transform)
     test_dataset = HAM10000Dataset(test_df, transform=eval_transform)
 
+    pin_memory = torch.cuda.is_available()
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=pin_memory,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=pin_memory,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=pin_memory,
     )
 
     return train_loader, val_loader, test_loader, (train_df, val_df, test_df)

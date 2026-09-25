@@ -2,10 +2,11 @@
 main.py
 Main entry point for Skin Lesion Classification.
 Allows running training, evaluation, or both from the command line.
+Supports local execution and Kaggle Multi-GPU environments.
 
 Usage:
-    python main.py --train --evaluate
     python main.py --epochs 50 --batch-size 128
+    python main.py --data-dir /kaggle/input/skin-cancer-mnist-ham10000 --num-workers 4
     python main.py --evaluate-only
 """
 
@@ -19,6 +20,7 @@ from src.config import (
     LEARNING_RATE,
     CHECKPOINTS_DIR,
     OUTPUTS_DIR,
+    DATA_DIR,
     DEVICE,
 )
 from src.dataset import get_dataloaders
@@ -30,6 +32,12 @@ from src.evaluate import evaluate_model, load_best_model_and_evaluate
 def parse_args():
     parser = argparse.ArgumentParser(
         description="CNN Skin Cancer Diagnosis based on BMC Medical Imaging (2024)"
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help="Custom dataset directory path (auto-detects Kaggle input if not set)",
     )
     parser.add_argument(
         "--epochs",
@@ -50,6 +58,12 @@ def parse_args():
         help=f"Initial learning rate (default: {LEARNING_RATE})",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=2 if torch.cuda.is_available() else 0,
+        help="Number of DataLoader worker processes (default: 2 on GPU, 0 on CPU)",
+    )
+    parser.add_argument(
         "--no-balance",
         action="store_true",
         help="Disable training data balancing/augmentation",
@@ -64,16 +78,21 @@ def parse_args():
 
 def main():
     args = parse_args()
+    data_dir_path = Path(args.data_dir) if args.data_dir else DATA_DIR
+
     print("================================================================")
     print("  CNN Skin Cancer Diagnosis - HAM10000 Classification")
-    print(f"  Device: {DEVICE}")
+    print(f"  Device: {DEVICE} (GPUs available: {torch.cuda.device_count()})")
+    print(f"  Data Directory: {data_dir_path}")
     print("================================================================")
 
     # 1. Load DataLoaders
     print("\n[Step 1/3] Preparing datasets and DataLoaders...")
     train_loader, val_loader, test_loader, (train_df, val_df, test_df) = get_dataloaders(
+        data_dir=data_dir_path,
         batch_size=args.batch_size,
         balance_train=not args.no_balance,
+        num_workers=args.num_workers,
     )
     print(f"Data ready: Train={len(train_df)}, Val={len(val_df)}, Test={len(test_df)}")
 
