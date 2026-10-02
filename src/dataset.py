@@ -253,14 +253,14 @@ class HAM10000Dataset(Dataset):
         return image, label
 
 
-def get_transforms():
+def get_transforms(img_size: int = IMAGE_HEIGHT):
     """
     Returns data transforms for training and validation/testing.
     Training uses rotation, zoom, flips, shearing, and brightness adjustment (Paper Sec. Data Augmentation).
-    Both resize to 28x28 and scale pixels to [0, 1] via ToTensor().
+    Scales pixels to [0, 1] via ToTensor().
     """
     train_transform = transforms.Compose([
-        transforms.Resize((IMAGE_HEIGHT, IMAGE_WIDTH)),
+        transforms.Resize((img_size, img_size)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
         transforms.RandomRotation(degrees=20),
@@ -275,7 +275,7 @@ def get_transforms():
     ])
 
     eval_transform = transforms.Compose([
-        transforms.Resize((IMAGE_HEIGHT, IMAGE_WIDTH)),
+        transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),  # Scales [0, 255] -> [0.0, 1.0]
     ])
 
@@ -286,6 +286,8 @@ def get_dataloaders(
     data_dir: Path = None,
     batch_size: int = BATCH_SIZE,
     balance_train: bool = True,
+    target_samples_per_class: int = None,
+    img_size: int = IMAGE_HEIGHT,
     num_workers: int = 0,
 ):
     """
@@ -293,15 +295,18 @@ def get_dataloaders(
     1. Loads metadata and resolves paths
     2. Splits into stratified train, val, and test sets
     3. Balances the train split using oversampling
-    4. Builds PyTorch DataLoaders
+    4. Builds PyTorch DataLoaders with given img_size
     """
     df = load_and_prepare_metadata(data_dir=data_dir)
     train_df, val_df, test_df = split_data(df)
 
     if balance_train:
-        train_df = balance_training_data(train_df)
+        train_df = balance_training_data(
+            train_df,
+            target_samples_per_class=target_samples_per_class,
+        )
 
-    train_transform, eval_transform = get_transforms()
+    train_transform, eval_transform = get_transforms(img_size=img_size)
 
     train_dataset = HAM10000Dataset(train_df, transform=train_transform)
     val_dataset = HAM10000Dataset(val_df, transform=eval_transform)

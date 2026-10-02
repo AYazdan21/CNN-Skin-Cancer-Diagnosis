@@ -194,13 +194,14 @@ def evaluate_model(
 def load_best_model_and_evaluate(
     test_loader,
     checkpoint_path: Path = CHECKPOINTS_DIR / "best_model.pth",
+    use_batch_norm: bool = False,
     device: torch.device = DEVICE,
 ):
     """Helper to load checkpointed weights and run evaluation."""
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
 
-    model = build_model().to(device)
+    model = build_model(use_batch_norm=use_batch_norm).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"[*] Loaded checkpoint from {checkpoint_path} (epoch {checkpoint.get('epoch', 'N/A')})")

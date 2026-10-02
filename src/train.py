@@ -162,6 +162,7 @@ def train_model(
     val_loader,
     epochs: int = EPOCHS,
     lr: float = LEARNING_RATE,
+    class_weights: torch.Tensor = None,
     device: torch.device = DEVICE,
     checkpoint_dir: Path = CHECKPOINTS_DIR,
     output_dir: Path = OUTPUTS_DIR,
@@ -170,7 +171,7 @@ def train_model(
     Main training function orchestrating:
     - Multi-GPU DataParallel wrapping if available
     - Adam optimizer
-    - CrossEntropyLoss
+    - CrossEntropyLoss (with optional class weights)
     - ReduceLROnPlateau scheduler
     - EarlyStopping & Checkpointing
     """
@@ -185,7 +186,11 @@ def train_model(
         print(f"[*] Multi-GPU: Detected {torch.cuda.device_count()} GPUs. Using nn.DataParallel!")
         model = nn.DataParallel(model)
 
-    criterion = nn.CrossEntropyLoss()
+    if class_weights is not None:
+        criterion = nn.CrossEntropyLoss(weight=class_weights.to(device))
+        print(f"[*] Applied class weights to CrossEntropyLoss: {class_weights.tolist()}")
+    else:
+        criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=lr,
