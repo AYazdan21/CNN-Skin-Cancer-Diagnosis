@@ -22,6 +22,41 @@ An implementation and benchmark of deep learning architectures for dermatologica
 
 ---
 
+## 📊 Benchmark & Comparison
+
+| Metric / Lesion Class | Paper's Published Fig. 8 | Custom CNN ($128\times128$) | EfficientNet-B0 ($224\times224$) |
+|---|---|---|---|
+| **Overall Accuracy** | **$76.0\%$** | **$75.55\%$** | *Run to evaluate* |
+| **Macro Avg F1-Score** | **$0.48$** | **$0.61$** | *Run to evaluate* |
+| **Weighted Avg F1-Score**| **$0.76$** | **$0.76$** | *Run to evaluate* |
+| `mel` (Melanoma) F1 | $0.46$ | **$0.49$** | *Run to evaluate* |
+| `bcc` (Basal Cell) F1 | $0.50$ | **$0.57$** | *Run to evaluate* |
+| `akiec` (Precancerous) F1 | $0.39$ | **$0.61$** | *Run to evaluate* |
+| `vasc` (Vascular) F1 | $0.58$ | **$0.68$** | *Run to evaluate* |
+| `df` (Dermatofibroma) F1 | $0.10$ | **$0.48$** | *Run to evaluate* |
+| `bkl` (Keratosis) F1 | $0.46$ | **$0.58$** | *Run to evaluate* |
+| `nv` (Nevi) F1 | $0.89$ | **$0.87$** | *Run to evaluate* |
+
+---
+
+## 🖼️ Visual Results
+
+### 1. Sample Predictions (Paper Fig. 7 Reproduction)
+Sample correct classifications with predicted confidence scores across lesion types:
+![Sample Predictions](outputs/sample_predictions_custom_cnn.png)
+
+### 2. Misclassified Instances (Paper Fig. 12 Reproduction)
+Borderline or ambiguous cases analyzed by the model:
+![Misclassified Samples](outputs/misclassified_samples_custom_cnn.png)
+
+### 3. Confusion Matrix (Paper Fig. 9 Reproduction)
+![Confusion Matrix](outputs/confusion_matrix_custom_cnn.png)
+
+### 4. Multi-class ROC & AUC Curves (Paper Fig. 10 Reproduction)
+![ROC Curves](outputs/roc_curves_custom_cnn.png)
+
+---
+
 ## 📂 Project Structure
 
 ```
@@ -32,7 +67,8 @@ CNN-Skin-Cancer-Diagnosis/
 │   ├── dataset.py                 # Resizing, ImageNet/standard normalization, balanced augmentation
 │   ├── model.py                   # Custom CNN (from scratch) & EfficientNet-B0 (transfer learning)
 │   ├── train.py                   # Multi-GPU training, Adam, ReduceLROnPlateau, EarlyStopping
-│   └── evaluate.py                # ROC-AUC, Confusion Matrix, Classification Report, Model Comparison
+│   ├── evaluate.py                # ROC-AUC, Confusion Matrix, Classification Report, Model Comparison
+│   └── visualize_inference.py     # Sample prediction grids and error analysis (Fig. 7 & 12)
 ├── checkpoints/                   # Saved model weights (.pth)
 ├── outputs/                       # Metrics, classification reports, plots, comparison CSV
 ├── requirements.txt               # Dependencies
@@ -58,4 +94,8 @@ python main.py --model efficientnet --img-size 224 --epochs 15 --lr 3e-4 --smoot
 ```powershell
 python main.py --compare
 ```
-This reads the evaluation metrics from `outputs/` and outputs a benchmark comparison table saved to `outputs/model_comparison.csv`.
+
+### 4. Evaluate Existing Checkpoint & Generate Sample Grids
+```powershell
+python main.py --model custom_cnn --evaluate-only
+```

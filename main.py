@@ -215,7 +215,23 @@ def main():
         device=DEVICE,
     )
 
-    # 4. Generate comparison if other model results exist
+    # 4. Generate Inference Sample Grids for Documentation & README
+    print(f"\n[Step 4/4] Generating inference sample grids (Fig. 7 & Fig. 12)...")
+    eval_model = build_model(model_name=model_name, use_batch_norm=args.batch_norm).to(DEVICE)
+    ckpt = torch.load(checkpoint_path, map_location=DEVICE)
+    eval_model.load_state_dict(ckpt["model_state_dict"])
+
+    from src.visualize_inference import generate_inference_visualizations
+    generate_inference_visualizations(
+        model=eval_model,
+        test_loader=test_loader,
+        model_name=model_name,
+        is_imagenet=normalize_imagenet,
+        device=DEVICE,
+        output_dir=OUTPUTS_DIR,
+    )
+
+    # 5. Generate comparison if other model results exist
     compare_models(output_dir=OUTPUTS_DIR)
 
 
