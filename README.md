@@ -26,16 +26,17 @@ An implementation and benchmark of deep learning architectures for dermatologica
 
 | Metric / Lesion Class | Paper's Published Fig. 8 | Custom CNN ($128\times128$) | EfficientNet-B0 ($224\times224$) |
 |---|---|---|---|
-| **Overall Accuracy** | **$76.0\%$** | **$75.55\%$** | *Run to evaluate* |
-| **Macro Avg F1-Score** | **$0.48$** | **$0.61$** | *Run to evaluate* |
-| **Weighted Avg F1-Score**| **$0.76$** | **$0.76$** | *Run to evaluate* |
-| `mel` (Melanoma) F1 | $0.46$ | **$0.49$** | *Run to evaluate* |
-| `bcc` (Basal Cell) F1 | $0.50$ | **$0.57$** | *Run to evaluate* |
-| `akiec` (Precancerous) F1 | $0.39$ | **$0.61$** | *Run to evaluate* |
-| `vasc` (Vascular) F1 | $0.58$ | **$0.68$** | *Run to evaluate* |
-| `df` (Dermatofibroma) F1 | $0.10$ | **$0.48$** | *Run to evaluate* |
-| `bkl` (Keratosis) F1 | $0.46$ | **$0.58$** | *Run to evaluate* |
-| `nv` (Nevi) F1 | $0.89$ | **$0.87$** | *Run to evaluate* |
+| **Overall Accuracy** | **$76.0\%$** | **$75.55\%$** | **$\mathbf{86.73\%}$ (+10.7% gain)** |
+| **Macro Avg F1-Score** | **$0.48$** | **$0.61$** | **$\mathbf{0.81}$ (+33% gain)** |
+| **Weighted Avg F1-Score**| **$0.76$** | **$0.76$** | **$\mathbf{0.87}$** |
+| `mel` (Melanoma) F1 | $0.46$ | **$0.49$** | **$\mathbf{0.67}$** |
+| `bcc` (Basal Cell) F1 | $0.50$ | **$0.57$** | **$\mathbf{0.82}$** |
+| `akiec` (Precancerous) F1 | $0.39$ | **$0.61$** | **$\mathbf{0.76}$** |
+| `vasc` (Vascular) F1 | $0.58$ | **$0.68$** | **$\mathbf{0.93}$** |
+| `df` (Dermatofibroma) F1 | $0.10$ | **$0.48$** | **$\mathbf{0.82}$ ($8\times$ better)** |
+| `bkl` (Keratosis) F1 | $0.46$ | **$0.58$** | **$\mathbf{0.73}$** |
+| `nv` (Nevi) F1 | $0.89$ | **$0.87$** | **$\mathbf{0.93}$** |
+| **Mean Squared Error (MSE)** | $0.375$ | $0.0482$ | **$\mathbf{0.0299}$ ($12.5\times$ lower error)** |
 
 ---
 
