@@ -1,20 +1,19 @@
 """
 src/model.py
-Optimized CNN architecture for dermatological lesion classification matching Table 2 & Fig. 4 of:
-'Enhanced skin cancer diagnosis using optimized CNN architecture and checkpoints for automated dermatological lesion classification'
-Supports:
-- Dynamic input sizes (28x28, 64x64, 128x128) via AdaptiveAvgPool2d((2, 2))
-- Optional Batch Normalization (Equations 10-12 in paper)
+Architectures for Skin Lesion Classification:
+1. SkinCancerCNN: Optimized 4-block CNN architecture from scratch matching Table 2 & Fig. 4 (132,583 params).
+2. EfficientNet-B0: State-of-the-art transfer learning backbone pre-trained on ImageNet (~5.3M params).
 """
 
 import torch
 import torch.nn as nn
+import torchvision.models as models
 from src.config import NUM_CLASSES, DROPOUT_RATE
 
 
 class SkinCancerCNN(nn.Module):
     """
-    Optimized 4-block CNN architecture with:
+    Optimized 4-block CNN architecture from the paper with:
     - Conv2D (16, 3x3) -> [BN] -> MaxPool -> Conv2D (32, 3x3) -> [BN] -> MaxPool
     - Conv2D (64, 3x3) -> [BN] -> MaxPool (ceil) -> Conv2D (128, 3x3) -> [BN] -> MaxPool
     - AdaptiveAvgPool2d((2, 2)) -> Flatten (512) -> Dense (64) -> Dropout -> Dense (32) -> Dense (7)
@@ -91,13 +90,54 @@ class SkinCancerCNN(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
+def build_efficientnet_b0(
+    num_classes: int = NUM_CLASSES,
+    pretrained: bool = True,
+    dropout_rate: float = 0.3,
+) -> nn.Module:
+    """
+    Builds EfficientNet-B0 with ImageNet pre-trained weights and a custom classification head.
+    """
+    weights = models.EfficientNet_B0_Weights.DEFAULT if pretrained else None
+    model = models.efficientnet_b0(weights=weights)
+
+    # In EfficientNet-B0, classifier is Sequential(Dropout, Linear(1280, 1000))
+    in_features = model.classifier[1].in_features
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=dropout_rate),
+        nn.Linear(in_features, num_classes),
+    )
+
+    # Helper method for consistent API
+    def count_parameters():
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    model.count_parameters = count_parameters
+    return model
+
+
 def build_model(
+    model_name: str = "custom_cnn",
     num_classes: int = NUM_CLASSES,
     dropout_rate: float = DROPOUT_RATE,
     use_batch_norm: bool = False,
-) -> SkinCancerCNN:
-    return SkinCancerCNN(
-        num_classes=num_classes,
-        dropout_rate=dropout_rate,
-        use_batch_norm=use_batch_norm,
-    )
+    pretrained: bool = True,
+) -> nn.Module:
+    """
+    Factory function:
+    - 'custom_cnn': The paper's lightweight CNN built from scratch (132k params)
+    - 'efficientnet': Pre-trained EfficientNet-B0 for high-accuracy transfer learning (~5.3M params)
+    """
+    name = model_name.lower().replace("-", "_")
+    if "efficientnet" in name:
+        return build_efficientnet_b0(
+            num_classes=num_classes,
+            pretrained=pretrained,
+            dropout_rate=dropout_rate,
+        )
+    else:
+        return SkinCancerCNN(
+            num_classes=num_classes,
+            dropout_rate=dropout_rate,
+            use_batch_norm=use_batch_norm,
+        )

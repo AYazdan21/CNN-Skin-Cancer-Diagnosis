@@ -253,13 +253,14 @@ class HAM10000Dataset(Dataset):
         return image, label
 
 
-def get_transforms(img_size: int = IMAGE_HEIGHT):
+def get_transforms(img_size: int = IMAGE_HEIGHT, normalize_imagenet: bool = False):
     """
     Returns data transforms for training and validation/testing.
-    Training uses rotation, zoom, flips, shearing, and brightness adjustment (Paper Sec. Data Augmentation).
-    Scales pixels to [0, 1] via ToTensor().
+    Training uses rotation, zoom, flips, shearing, and brightness adjustment.
+    If normalize_imagenet=True, applies ImageNet mean & std (recommended for EfficientNet).
+    Otherwise scales pixels to [0, 1] via ToTensor() (paper Eq. 2).
     """
-    train_transform = transforms.Compose([
+    train_ops = [
         transforms.Resize((img_size, img_size)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
@@ -271,15 +272,20 @@ def get_transforms(img_size: int = IMAGE_HEIGHT):
             shear=5,
         ),
         transforms.ColorJitter(brightness=0.1, contrast=0.1),
-        transforms.ToTensor(),  # Scales [0, 255] -> [0.0, 1.0] (Eq. 2 in paper)
-    ])
+        transforms.ToTensor(),
+    ]
 
-    eval_transform = transforms.Compose([
+    eval_ops = [
         transforms.Resize((img_size, img_size)),
-        transforms.ToTensor(),  # Scales [0, 255] -> [0.0, 1.0]
-    ])
+        transforms.ToTensor(),
+    ]
 
-    return train_transform, eval_transform
+    if normalize_imagenet:
+        norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        train_ops.append(norm)
+        eval_ops.append(norm)
+
+    return transforms.Compose(train_ops), transforms.Compose(eval_ops)
 
 
 def get_dataloaders(
@@ -288,6 +294,7 @@ def get_dataloaders(
     balance_train: bool = True,
     target_samples_per_class: int = None,
     img_size: int = IMAGE_HEIGHT,
+    normalize_imagenet: bool = False,
     num_workers: int = 0,
 ):
     """
@@ -295,7 +302,7 @@ def get_dataloaders(
     1. Loads metadata and resolves paths
     2. Splits into stratified train, val, and test sets
     3. Balances the train split using oversampling
-    4. Builds PyTorch DataLoaders with given img_size
+    4. Builds PyTorch DataLoaders with given img_size and normalization
     """
     df = load_and_prepare_metadata(data_dir=data_dir)
     train_df, val_df, test_df = split_data(df)
@@ -306,7 +313,10 @@ def get_dataloaders(
             target_samples_per_class=target_samples_per_class,
         )
 
-    train_transform, eval_transform = get_transforms(img_size=img_size)
+    train_transform, eval_transform = get_transforms(
+        img_size=img_size,
+        normalize_imagenet=normalize_imagenet,
+    )
 
     train_dataset = HAM10000Dataset(train_df, transform=train_transform)
     val_dataset = HAM10000Dataset(val_df, transform=eval_transform)

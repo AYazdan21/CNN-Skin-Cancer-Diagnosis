@@ -5,6 +5,7 @@ Evaluation module reproducing all metrics from the paper:
 - Confusion Matrix visualization (Fig. 9)
 - Multi-class ROC Curve and AUC (Fig. 10)
 - Regression metrics: MSE, RMSE, MAE (Fig. 11, Eq. 24-26)
+- Multi-model comparison between Custom CNN and EfficientNet
 """
 
 import json
@@ -66,7 +67,7 @@ def run_inference(model: torch.nn.Module, dataloader, device: torch.device):
     )
 
 
-def plot_confusion_matrix(cm: np.ndarray, class_names: list, save_path: Path):
+def plot_confusion_matrix(cm: np.ndarray, class_names: list, save_path: Path, title: str = "Confusion Matrix"):
     """Plots and saves the confusion matrix heatmap (Paper Fig. 9)."""
     short_names = list(CLASS_MAPPING.keys())
     plt.figure(figsize=(9, 7))
@@ -78,7 +79,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: list, save_path: Path):
         xticklabels=short_names,
         yticklabels=short_names,
     )
-    plt.title("Confusion Matrix for Augmented Dataset Model", fontsize=14, pad=12)
+    plt.title(title, fontsize=14, pad=12)
     plt.xlabel("Predicted label", fontsize=12)
     plt.ylabel("True label", fontsize=12)
     plt.tight_layout()
@@ -87,7 +88,7 @@ def plot_confusion_matrix(cm: np.ndarray, class_names: list, save_path: Path):
     print(f"[*] Confusion matrix saved to {save_path}")
 
 
-def plot_roc_curves(y_true_onehot: np.ndarray, y_probs: np.ndarray, save_path: Path):
+def plot_roc_curves(y_true_onehot: np.ndarray, y_probs: np.ndarray, save_path: Path, title: str = "Multi-class ROC and AUC"):
     """Plots multi-class ROC curves and AUC for each lesion category (Paper Fig. 10)."""
     short_names = list(CLASS_MAPPING.keys())
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#17becf", "#8c564b"]
@@ -109,7 +110,7 @@ def plot_roc_curves(y_true_onehot: np.ndarray, y_probs: np.ndarray, save_path: P
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate", fontsize=12)
     plt.ylabel("True Positive Rate", fontsize=12)
-    plt.title("Multi-class ROC and AUC", fontsize=14, pad=12)
+    plt.title(title, fontsize=14, pad=12)
     plt.legend(loc="lower right", fontsize=10)
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -121,6 +122,7 @@ def plot_roc_curves(y_true_onehot: np.ndarray, y_probs: np.ndarray, save_path: P
 def evaluate_model(
     model: torch.nn.Module,
     test_loader,
+    model_name: str = "custom_cnn",
     device: torch.device = DEVICE,
     output_dir: Path = OUTPUTS_DIR,
 ):
@@ -153,12 +155,24 @@ def evaluate_model(
 
     # 2. Confusion Matrix
     cm = confusion_matrix(y_true, y_pred)
+    plot_confusion_matrix(
+        cm,
+        short_names,
+        output_dir / f"confusion_matrix_{model_name}.png",
+        title=f"Confusion Matrix ({model_name})",
+    )
     plot_confusion_matrix(cm, short_names, output_dir / "confusion_matrix.png")
 
     # 3. One-hot true labels for ROC and Regression error
     y_true_onehot = np.eye(NUM_CLASSES)[y_true]
 
     # 4. ROC-AUC Curves
+    plot_roc_curves(
+        y_true_onehot,
+        y_probs,
+        output_dir / f"roc_curves_{model_name}.png",
+        title=f"Multi-class ROC and AUC ({model_name})",
+    )
     plot_roc_curves(y_true_onehot, y_probs, output_dir / "roc_curves.png")
 
     # 5. Regression Metrics (Paper Eq. 24, 25, 26: MAE, MSE, RMSE)
@@ -167,6 +181,7 @@ def evaluate_model(
     mae = float(mean_absolute_error(y_true_onehot, y_probs))
 
     results = {
+        "model_name": model_name,
         "test_accuracy": float(acc),
         "mean_squared_error": mse,
         "root_mean_squared_error": rmse,
@@ -175,35 +190,100 @@ def evaluate_model(
     }
 
     # Save metrics JSON & Classification Report CSV
+    with open(output_dir / f"test_metrics_{model_name}.json", "w") as f:
+        json.dump(results, f, indent=4)
     with open(output_dir / "test_metrics.json", "w") as f:
         json.dump(results, f, indent=4)
 
     df_report = pd.DataFrame(report_dict).transpose()
+    df_report.to_csv(output_dir / f"classification_report_{model_name}.csv")
     df_report.to_csv(output_dir / "classification_report.csv")
 
-    print("\n================ Evaluation Results ================")
+    print(f"\n================ Evaluation Results [{model_name}] ================")
     print(f"Overall Test Accuracy: {acc * 100:.2f}%")
     print(f"MSE: {mse:.4f} | RMSE: {rmse:.4f} | MAE: {mae:.4f}")
     print("\nClassification Report:")
     print(report_text)
-    print("====================================================\n")
+    print("===================================================================\n")
 
     return results
 
 
 def load_best_model_and_evaluate(
     test_loader,
-    checkpoint_path: Path = CHECKPOINTS_DIR / "best_model.pth",
+    model_name: str = "custom_cnn",
+    checkpoint_path: Path = None,
     use_batch_norm: bool = False,
     device: torch.device = DEVICE,
 ):
     """Helper to load checkpointed weights and run evaluation."""
+    if checkpoint_path is None:
+        candidate = CHECKPOINTS_DIR / f"best_{model_name}.pth"
+        if candidate.exists():
+            checkpoint_path = candidate
+        else:
+            checkpoint_path = CHECKPOINTS_DIR / "best_model.pth"
+
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
 
-    model = build_model(use_batch_norm=use_batch_norm).to(device)
+    model = build_model(model_name=model_name, use_batch_norm=use_batch_norm).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     print(f"[*] Loaded checkpoint from {checkpoint_path} (epoch {checkpoint.get('epoch', 'N/A')})")
 
-    return evaluate_model(model, test_loader, device=device)
+    return evaluate_model(model, test_loader, model_name=model_name, device=device)
+
+
+def compare_models(output_dir: Path = OUTPUTS_DIR):
+    """
+    Reads all available test_metrics_*.json files in output_dir,
+    prints a side-by-side comparison table, and saves to model_comparison.csv.
+    """
+    files = list(output_dir.glob("test_metrics_*.json"))
+    if not files:
+        # Fallback to test_metrics.json if present
+        default_file = output_dir / "test_metrics.json"
+        if default_file.exists():
+            files = [default_file]
+        else:
+            print("[!] No evaluation metrics found in outputs/ yet.")
+            return None
+
+    rows = []
+    classes = list(CLASS_MAPPING.keys())
+
+    for f in files:
+        with open(f, "r") as fp:
+            data = json.load(fp)
+
+        name = data.get("model_name", f.stem.replace("test_metrics_", ""))
+        acc = data.get("test_accuracy", 0.0) * 100
+        rep = data.get("classification_report", {})
+
+        macro_f1 = rep.get("macro avg", {}).get("f1-score", 0.0)
+        weighted_f1 = rep.get("weighted avg", {}).get("f1-score", 0.0)
+        mse = data.get("mean_squared_error", 0.0)
+
+        row = {
+            "Model": name,
+            "Accuracy (%)": f"{acc:.2f}%",
+            "Macro F1": f"{macro_f1:.3f}",
+            "Weighted F1": f"{weighted_f1:.3f}",
+            "MSE": f"{mse:.4f}",
+        }
+        for c in classes:
+            c_f1 = rep.get(c, {}).get("f1-score", 0.0)
+            row[f"{c} F1"] = f"{c_f1:.3f}"
+
+        rows.append(row)
+
+    df_comp = pd.DataFrame(rows)
+    save_path = output_dir / "model_comparison.csv"
+    df_comp.to_csv(save_path, index=False)
+
+    print("\n======================= Model Comparison =======================")
+    print(df_comp.to_string(index=False))
+    print(f"[*] Comparison table saved to {save_path}")
+    print("=================================================================\n")
+    return df_comp

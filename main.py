@@ -1,18 +1,20 @@
 """
 main.py
 Main entry point for Skin Lesion Classification.
-Allows running training, evaluation, or both from the command line.
-Supports local execution and Kaggle Multi-GPU environments.
+Supports:
+1. Custom CNN (Paper architecture from scratch, 132k params)
+2. EfficientNet-B0 (Transfer learning with ImageNet pre-trained weights, ~5.3M params)
+3. Model comparison table generator (--compare)
 
 Usage:
-    # Baseline run
-    python main.py --epochs 50 --batch-size 128
+    # Run Custom CNN (Baseline from paper)
+    python main.py --model custom_cnn --img-size 128 --batch-norm --smooth-balance --epochs 50
 
-    # Higher resolution + BatchNorm + smooth balancing (recommended for pushing accuracy to 76%-80%)
-    python main.py --img-size 64 --batch-norm --smooth-balance --epochs 50
+    # Run EfficientNet-B0 Transfer Learning
+    python main.py --model efficientnet --img-size 224 --epochs 15 --lr 3e-4 --smooth-balance
 
-    # Evaluate existing checkpoint
-    python main.py --evaluate-only
+    # Compare both models side-by-side
+    python main.py --compare
 """
 
 import argparse
@@ -28,17 +30,23 @@ from src.config import (
     OUTPUTS_DIR,
     DATA_DIR,
     DEVICE,
-    NUM_CLASSES,
 )
 from src.dataset import get_dataloaders
 from src.model import build_model
 from src.train import train_model
-from src.evaluate import evaluate_model, load_best_model_and_evaluate
+from src.evaluate import evaluate_model, load_best_model_and_evaluate, compare_models
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="CNN Skin Cancer Diagnosis based on BMC Medical Imaging (2024)"
+        description="Skin Lesion Classification: Custom CNN vs. EfficientNet-B0"
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="custom_cnn",
+        choices=["custom_cnn", "efficientnet"],
+        help="Model architecture: 'custom_cnn' (paper baseline) or 'efficientnet' (transfer learning)",
     )
     parser.add_argument(
         "--data-dir",
@@ -49,18 +57,18 @@ def parse_args():
     parser.add_argument(
         "--img-size",
         type=int,
-        default=28,
-        help="Input image resolution: 28 (paper baseline), 64, or 128 (default: 28)",
+        default=None,
+        help="Input image resolution (default: 128 for custom_cnn, 224 for efficientnet)",
     )
     parser.add_argument(
         "--batch-norm",
         action="store_true",
-        help="Enable Batch Normalization layers in CNN (paper Equations 10-12)",
+        help="Enable Batch Normalization in custom_cnn (Eq. 10-12 in paper)",
     )
     parser.add_argument(
         "--smooth-balance",
         action="store_true",
-        help="Use moderate/smooth class oversampling (cap at 2500 samples/class) to avoid over-predicting false positives on majority class",
+        help="Cap minority oversampling at 2500 samples/class to prevent majority false alarms",
     )
     parser.add_argument(
         "--target-samples",
@@ -76,8 +84,8 @@ def parse_args():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=EPOCHS,
-        help=f"Number of training epochs (default: {EPOCHS})",
+        default=None,
+        help="Number of training epochs (default: 50 for custom_cnn, 15 for efficientnet)",
     )
     parser.add_argument(
         "--batch-size",
@@ -88,8 +96,8 @@ def parse_args():
     parser.add_argument(
         "--lr",
         type=float,
-        default=LEARNING_RATE,
-        help=f"Initial learning rate (default: {LEARNING_RATE})",
+        default=None,
+        help="Initial learning rate (default: 1e-3 for custom_cnn, 3e-4 for efficientnet)",
     )
     parser.add_argument(
         "--num-workers",
@@ -107,11 +115,31 @@ def parse_args():
         action="store_true",
         help="Skip training and run evaluation on the best saved checkpoint",
     )
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Generate a side-by-side comparison table of all evaluated models",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    # If --compare is requested, print comparison and exit
+    if args.compare:
+        compare_models(output_dir=OUTPUTS_DIR)
+        return
+
+    model_name = args.model.lower()
+    is_efficientnet = "efficientnet" in model_name
+
+    # Set sensible defaults per architecture
+    img_size = args.img_size if args.img_size is not None else (224 if is_efficientnet else 128)
+    epochs = args.epochs if args.epochs is not None else (15 if is_efficientnet else EPOCHS)
+    lr = args.lr if args.lr is not None else (3e-4 if is_efficientnet else LEARNING_RATE)
+    normalize_imagenet = is_efficientnet
+
     data_dir_path = Path(args.data_dir) if args.data_dir else DATA_DIR
 
     # Determine balancing target
@@ -120,10 +148,11 @@ def main():
         target_samples = 2500
 
     print("================================================================")
-    print("  CNN Skin Cancer Diagnosis - HAM10000 Classification")
+    print("  Skin Cancer Diagnosis - HAM10000 Classification")
+    print(f"  Model: {model_name.upper()}")
     print(f"  Device: {DEVICE} (GPUs available: {torch.cuda.device_count()})")
-    print(f"  Image Resolution: {args.img_size}x{args.img_size}")
-    print(f"  Batch Normalization: {args.batch_norm}")
+    print(f"  Image Resolution: {img_size}x{img_size}")
+    print(f"  Normalization: {'ImageNet (mean/std)' if normalize_imagenet else '[0, 1] scaling'}")
     print(f"  Data Directory: {data_dir_path}")
     print("================================================================")
 
@@ -134,7 +163,8 @@ def main():
         batch_size=args.batch_size,
         balance_train=not args.no_balance,
         target_samples_per_class=target_samples,
-        img_size=args.img_size,
+        img_size=img_size,
+        normalize_imagenet=normalize_imagenet,
         num_workers=args.num_workers,
     )
     print(f"Data ready: Train={len(train_df)}, Val={len(val_df)}, Test={len(test_df)}")
@@ -149,18 +179,24 @@ def main():
         print(f"[*] Computed class weights: {class_weights.tolist()}")
 
     # 2. Train or Load Checkpoint
-    checkpoint_path = CHECKPOINTS_DIR / "best_model.pth"
+    checkpoint_path = CHECKPOINTS_DIR / f"best_{model_name}.pth"
+
     if not args.evaluate_only:
-        print("\n[Step 2/3] Building model and starting training...")
-        model = build_model(use_batch_norm=args.batch_norm).to(DEVICE)
+        print(f"\n[Step 2/3] Building {model_name} and starting training...")
+        model = build_model(
+            model_name=model_name,
+            use_batch_norm=args.batch_norm,
+            pretrained=True,
+        ).to(DEVICE)
         print(f"Model built: {model.count_parameters():,} trainable parameters.")
 
         train_model(
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
-            epochs=args.epochs,
-            lr=args.lr,
+            model_name=model_name,
+            epochs=epochs,
+            lr=lr,
             class_weights=class_weights,
             device=DEVICE,
             checkpoint_dir=CHECKPOINTS_DIR,
@@ -170,13 +206,17 @@ def main():
         print(f"\n[Step 2/3] Skipping training (--evaluate-only specified).")
 
     # 3. Final Evaluation on Test Set using Best Saved Model
-    print("\n[Step 3/3] Running final evaluation on Test Set...")
+    print(f"\n[Step 3/3] Running final evaluation on Test Set for {model_name}...")
     load_best_model_and_evaluate(
         test_loader=test_loader,
+        model_name=model_name,
         checkpoint_path=checkpoint_path,
         use_batch_norm=args.batch_norm,
         device=DEVICE,
     )
+
+    # 4. Generate comparison if other model results exist
+    compare_models(output_dir=OUTPUTS_DIR)
 
 
 if __name__ == "__main__":

@@ -160,6 +160,7 @@ def train_model(
     model: nn.Module,
     train_loader,
     val_loader,
+    model_name: str = "custom_cnn",
     epochs: int = EPOCHS,
     lr: float = LEARNING_RATE,
     class_weights: torch.Tensor = None,
@@ -177,7 +178,7 @@ def train_model(
     """
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    best_checkpoint_path = checkpoint_dir / "best_model.pth"
+    best_checkpoint_path = checkpoint_dir / f"best_{model_name}.pth"
 
     model = model.to(device)
 
@@ -209,6 +210,7 @@ def train_model(
     )
 
     history = {
+        "model_name": model_name,
         "train_loss": [],
         "train_acc": [],
         "val_loss": [],
@@ -216,10 +218,10 @@ def train_model(
         "learning_rates": [],
     }
 
-    print(f"\n================ Starting Training ================")
+    print(f"\n================ Starting Training [{model_name}] ================")
     print(f"Device: {device} (Count: {torch.cuda.device_count()}) | Max Epochs: {epochs} | Initial LR: {lr}")
     print(f"Checkpoints directory: {best_checkpoint_path}")
-    print(f"===================================================\n")
+    print(f"===================================================================\n")
 
     for epoch in range(1, epochs + 1):
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
@@ -248,12 +250,15 @@ def train_model(
             break
 
     # Save training history JSON
-    history_file = output_dir / "training_history.json"
+    history_file = output_dir / f"training_history_{model_name}.json"
     with open(history_file, "w") as f:
         json.dump(history, f, indent=4)
     print(f"[*] Training history saved to {history_file}")
 
     # Plot training curves
+    plot_training_history(history, output_dir / f"training_curves_{model_name}.png")
+
+    # Also keep default training_curves.png as latest
     plot_training_history(history, output_dir / "training_curves.png")
 
     print(f"\nTraining completed! Best checkpoint from epoch {early_stopping.best_epoch} saved to {best_checkpoint_path}")
