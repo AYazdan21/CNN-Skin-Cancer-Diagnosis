@@ -2,23 +2,55 @@
 
 An implementation and benchmark of deep learning architectures for dermatological lesion classification on the **HAM10000** dataset, based on and expanding upon:
 
-> **"Enhanced skin cancer diagnosis using optimized CNN architecture and checkpoints for automated dermatological lesion classification"**  
+> 📄 **Research Paper:**  
+> [Enhanced skin cancer diagnosis using optimized CNN architecture and checkpoints for automated dermatological lesion classification](https://link.springer.com/article/10.1186/s12880-024-01356-8)  
 > *M Mohamed Musthafa, Mahesh T R, Vinoth Kumar V, Suresh Guluwadi*  
-> **BMC Medical Imaging (2024) 24:201**
+> Published in **BMC Medical Imaging (2024) 24:201**, Springer Nature.  
+> DOI: [10.1186/s12880-024-01356-8](https://doi.org/10.1186/s12880-024-01356-8)
 
 ---
 
-## 🔬 Supported Architectures
+## 📖 Paper Overview
 
-1. **Custom CNN (Paper Architecture from Scratch)**:
-   - 4-block Conv2D + MaxPool + Dropout + Dense layers ($132,583$ parameters).
-   - Trained strictly from scratch on downscaled images ($28\times28$ to $128\times128$).
-   - Reaches **$75.55\%$ accuracy** and **$0.61$ Macro F1** (surpassing the paper's reported Figure 8 Macro F1 of $0.48$).
+Skin cancer is one of the most common malignancies globally, where early and accurate diagnosis plays a decisive role in patient survival. While dermatologists rely on visual inspection and dermoscopy, diagnosis can be subjective and access to specialists remains scarce in underserved areas.
 
-2. **EfficientNet-B0 (Transfer Learning)**:
-   - Pre-trained on ImageNet ($\approx 5.3\text{M}$ parameters).
-   - High resolution ($224 \times 224$) with ImageNet normalization.
-   - Fine-tuned in just $15$ epochs to achieve high sensitivity and diagnostic accuracy ($86\% - 91\%$).
+This study investigates automated dermatological diagnosis using Convolutional Neural Networks on the **HAM10000** ("Human Against Machine with 10,000 training images") benchmark dataset. The problem is a multi-class classification challenge across **7 distinct lesion categories**:
+1. `nv` (Melanocytic nevi) — benign moles (constituting ~67% of the dataset)
+2. `mel` (Melanoma) — highly aggressive malignancy arising from melanocytes
+3. `bkl` (Benign keratosis-like lesions) — solar lentigines, seborrheic keratoses
+4. `bcc` (Basal cell carcinoma) — common non-melanoma skin cancer
+5. `akiec` (Actinic keratoses & intraepithelial carcinoma) — precancerous lesions
+6. `vasc` (Vascular lesions) — angiomas, pyogenic granulomas
+7. `df` (Dermatofibroma) — benign fibrous nodules
+
+To tackle the extreme class imbalance (6,705 `nv` vs. barely 115 `df`), the authors employ targeted data augmentation, sequential convolutional feature extraction, Adam optimization, and training callbacks (`ModelCheckpoint`, `ReduceLROnPlateau`, and `EarlyStopping`).
+
+---
+
+## 🔬 Model Implementations
+
+This repository provides two complete, modular architectures implemented in **PyTorch**:
+
+### 1. Custom CNN (Paper Reproduction & Optimization)
+- **Design**: Implements the paper's exact 4-stage convolutional backbone from Table 2 and Figure 4:
+  - `Conv2D(16, 3x3)` $\to$ `MaxPool2D(2x2)`
+  - `Conv2D(32, 3x3)` $\to$ `MaxPool2D(2x2)`
+  - `Conv2D(64, 3x3)` $\to$ `MaxPool2D(2x2, ceil_mode=True)`
+  - `Conv2D(128, 3x3)` $\to$ `MaxPool2D(2x2)`
+  - `Flatten` ($512$ features) $\to$ `Dense(64)` $\to$ `Dropout(0.3)` $\to$ `Dense(32)` $\to$ `Dense(7)`
+  - **132,583 trainable parameters** trained strictly from scratch.
+- **Optimizations Added**:
+  - `AdaptiveAvgPool2d((2, 2))` spatial pooling, allowing the model to dynamically scale from low-resolution ($28\times28$) up to fine-grained dermoscopy scales ($64\times64$ and $128\times128$) without altering the parameter count.
+  - Optional Batch Normalization (as formulated in paper Equations 10–12).
+  - Smooth class balancing to prevent overwhelming false alarms on the majority `nv` class.
+- **Results**: Achieves **$75.55\%$ test accuracy** (matching the paper's true Figure 8 benchmark of $76\%$) while boosting Macro F1 from $0.48 \to \mathbf{0.61}$ across minority cancer classes.
+
+### 2. EfficientNet-B0 (Transfer Learning SOTA Benchmark)
+- **Design**: Extends the project beyond the paper's lightweight CNN by fine-tuning Google's **EfficientNet-B0** pre-trained on ImageNet ($\approx 5.3\text{M}$ parameters).
+  - Leverages depthwise separable convolutions for high accuracy with minimal computational overhead ($\approx 20\text{ MB}$ weights).
+  - High resolution ($224 \times 224$) with ImageNet channel-wise normalization (`mean/std`).
+  - Replaces the 1,000-class head with a custom dropout-regularized 7-class linear classifier.
+- **Results**: Demonstrates the clinical standard in medical computer vision, surging to **$86.73\%$ overall test accuracy (+10.7% boost)** and **$0.81$ Macro F1 (+33% boost)** in just 15 fine-tuning epochs on Dual T4 GPUs.
 
 ---
 
