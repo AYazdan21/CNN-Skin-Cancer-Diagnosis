@@ -5,6 +5,7 @@ Compatible with local and Kaggle environments.
 """
 
 from pathlib import Path
+import os
 import glob
 import pandas as pd
 import numpy as np
@@ -33,6 +34,11 @@ from src.config import (
 
 def find_metadata_file(data_dir: Path) -> Path:
     """Finds the metadata file whether named HAM10000_metadata or HAM10000_metadata.csv."""
+    data_dir = Path(data_dir)
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Directory {data_dir} does not exist.")
+
+    # 1. Direct candidate checks
     candidates = [
         data_dir / "HAM10000_metadata",
         data_dir / "HAM10000_metadata.csv",
@@ -42,32 +48,40 @@ def find_metadata_file(data_dir: Path) -> Path:
         if c.exists() and c.is_file():
             return c
 
-    # Search recursively for any CSV containing 'dx' column
-    for csv_file in data_dir.rglob("*.csv"):
-        try:
-            head = pd.read_csv(csv_file, nrows=2)
-            if "dx" in head.columns and "image_id" in head.columns:
-                return csv_file
-        except Exception:
-            continue
-
-    for raw_file in data_dir.rglob("*metadata*"):
-        if raw_file.is_file():
+    # 2. Search recursively for any file containing 'metadata' or any '.csv' with 'dx' column
+    found_csvs = list(data_dir.rglob("*.csv")) + list(data_dir.rglob("*metadata*"))
+    for file_path in found_csvs:
+        if file_path.is_file():
             try:
-                head = pd.read_csv(raw_file, nrows=2)
-                if "dx" in head.columns and "image_id" in head.columns:
-                    return raw_file
+                head = pd.read_csv(file_path, nrows=2)
+                cols = [str(col).strip().lower() for col in head.columns]
+                if "dx" in cols and "image_id" in cols:
+                    return file_path
             except Exception:
                 continue
 
-    raise FileNotFoundError(f"Could not find HAM10000 metadata file in {data_dir}")
+    # Diagnostic info if not found
+    items = list(data_dir.iterdir()) if data_dir.is_dir() else []
+    item_names = [i.name for i in items]
+    if len(item_names) == 0:
+        raise FileNotFoundError(
+            f"The directory '{data_dir}' is completely EMPTY!\n"
+            f"Did you attach the HAM10000 dataset in Kaggle?\n"
+            f"-> In Kaggle, click '+ Add Input' in the right sidebar, search for 'HAM10000' (or 'kmader/skin-cancer-mnist-ham10000'), and click Add."
+        )
+    else:
+        raise FileNotFoundError(
+            f"Could not find HAM10000 metadata CSV in '{data_dir}'.\n"
+            f"Found the following items in '{data_dir}': {item_names}\n"
+            f"Please check the folder name or pass --data-dir <path> explicitly."
+        )
 
 
 def find_image_files(data_dir: Path) -> dict:
     """Finds all images in data_dir and maps image stem (e.g. ISIC_0027419) to file path."""
     image_paths = {}
     valid_exts = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
-    for p in data_dir.rglob("*"):
+    for p in Path(data_dir).rglob("*"):
         if p.suffix in valid_exts and p.is_file():
             image_paths[p.stem] = str(p)
     return image_paths
@@ -81,6 +95,7 @@ def load_and_prepare_metadata(data_dir: Path = None) -> pd.DataFrame:
     if data_dir is None:
         data_dir = DATA_DIR
 
+    data_dir = Path(data_dir)
     metadata_path = find_metadata_file(data_dir)
     print(f"[*] Found metadata file: {metadata_path}")
 
@@ -88,18 +103,27 @@ def load_and_prepare_metadata(data_dir: Path = None) -> pd.DataFrame:
     df = pd.read_csv(metadata_path)
 
     # 2. Impute missing values (Paper Section: Preprocessing / Algorithm 1)
-    df["age"] = df["age"].fillna(df["age"].mean())
+    if "age" in df.columns:
+        df["age"] = df["age"].fillna(df["age"].mean())
 
     # 3. Map image_id to actual image file paths on disk
     image_paths = find_image_files(data_dir)
     print(f"[*] Found {len(image_paths)} total images in {data_dir}")
 
+    if len(image_paths) == 0:
+        raise FileNotFoundError(f"Found metadata at {metadata_path}, but 0 image files were found in {data_dir}!")
+
     df["image_path"] = df["image_id"].map(image_paths)
     missing_paths = df["image_path"].isnull().sum()
     if missing_paths > 0:
-        raise FileNotFoundError(
-            f"Could not find image files for {missing_paths} out of {len(df)} metadata entries."
-        )
+        # If some images aren't present (e.g. subset), drop rows that don't have images
+        if missing_paths == len(df):
+            raise FileNotFoundError(
+                f"None of the {len(df)} image IDs matched the image files found in {data_dir}."
+            )
+        else:
+            print(f"[!] Warning: {missing_paths} out of {len(df)} images missing. Filtering to {len(df) - missing_paths} available images.")
+            df = df.dropna(subset=["image_path"]).reset_index(drop=True)
 
     # 4. Map diagnoses strings to integer labels (0 to 6)
     df["label"] = df["dx"].map(CLASS_MAPPING)
