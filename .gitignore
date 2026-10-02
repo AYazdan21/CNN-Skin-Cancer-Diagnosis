@@ -22,8 +22,7 @@ dataverse_files.zip
 *.tar.gz
 *.csv.gz
 
-# Generated outputs, logs, and artifacts
-outputs/
+# Generated logs
 *.log
 
 # Jupyter Notebook checkpoints

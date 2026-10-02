@@ -1,0 +1,3 @@
+Model,Accuracy (%),Macro F1,Weighted F1,MSE,nv F1,mel F1,bkl F1,bcc F1,akiec F1,vasc F1,df F1
+custom_cnn,75.55%,0.611,0.762,0.0482,0.866,0.485,0.584,0.574,0.605,0.683,0.483
+efficientnet,86.73%,0.808,0.868,0.0299,0.933,0.667,0.729,0.816,0.759,0.933,0.818

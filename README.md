@@ -43,18 +43,29 @@ An implementation and benchmark of deep learning architectures for dermatologica
 ## 🖼️ Visual Results
 
 ### 1. Sample Predictions (Paper Fig. 7 Reproduction)
-Sample correct classifications with predicted confidence scores across lesion types:
-![Sample Predictions](outputs/sample_predictions_custom_cnn.png)
+Sample correct diagnoses with predicted confidence scores across lesion types:
 
-### 2. Misclassified Instances (Paper Fig. 12 Reproduction)
-Borderline or ambiguous cases analyzed by the model:
+**Custom CNN ($128\times128$):**
+![Custom CNN Predictions](outputs/sample_predictions_custom_cnn.png)
+
+**EfficientNet-B0 ($224\times224$):**
+![EfficientNet Predictions](outputs/sample_predictions_efficientnet.png)
+
+### 2. Confusion Matrices (Paper Fig. 9 Reproduction)
+
+| Custom CNN | EfficientNet-B0 |
+|:---:|:---:|
+| ![Custom CNN CM](outputs/confusion_matrix_custom_cnn.png) | ![EfficientNet CM](outputs/confusion_matrix_efficientnet.png) |
+
+### 3. Multi-Class ROC & AUC Curves (Paper Fig. 10 Reproduction)
+
+| Custom CNN | EfficientNet-B0 |
+|:---:|:---:|
+| ![Custom CNN ROC](outputs/roc_curves_custom_cnn.png) | ![EfficientNet ROC](outputs/roc_curves_efficientnet.png) |
+
+### 4. Ambiguous / Misclassified Cases (Paper Fig. 12 Reproduction)
+Challenging boundary cases analyzed by the models:
 ![Misclassified Samples](outputs/misclassified_samples_custom_cnn.png)
-
-### 3. Confusion Matrix (Paper Fig. 9 Reproduction)
-![Confusion Matrix](outputs/confusion_matrix_custom_cnn.png)
-
-### 4. Multi-class ROC & AUC Curves (Paper Fig. 10 Reproduction)
-![ROC Curves](outputs/roc_curves_custom_cnn.png)
 
 ---
 
