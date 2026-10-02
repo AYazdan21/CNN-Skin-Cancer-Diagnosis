@@ -60,21 +60,33 @@ def find_metadata_file(data_dir: Path) -> Path:
             except Exception:
                 continue
 
+    # 3. Fallback: Search across all of /kaggle/input (ignoring 'notebooks')
+    kaggle_input = Path("/kaggle/input")
+    if kaggle_input.exists() and data_dir != kaggle_input:
+        for file_path in list(kaggle_input.rglob("*.csv")) + list(kaggle_input.rglob("*metadata*")):
+            if "notebooks" in str(file_path):
+                continue
+            if file_path.is_file():
+                try:
+                    head = pd.read_csv(file_path, nrows=2)
+                    cols = [str(col).strip().lower() for col in head.columns]
+                    if "dx" in cols and "image_id" in cols:
+                        print(f"[*] Auto-discovered metadata in Kaggle dataset: {file_path}")
+                        return file_path
+                except Exception:
+                    continue
+
     # Diagnostic info if not found
     items = list(data_dir.iterdir()) if data_dir.is_dir() else []
     item_names = [i.name for i in items]
-    if len(item_names) == 0:
-        raise FileNotFoundError(
-            f"The directory '{data_dir}' is completely EMPTY!\n"
-            f"Did you attach the HAM10000 dataset in Kaggle?\n"
-            f"-> In Kaggle, click '+ Add Input' in the right sidebar, search for 'HAM10000' (or 'kmader/skin-cancer-mnist-ham10000'), and click Add."
-        )
-    else:
-        raise FileNotFoundError(
-            f"Could not find HAM10000 metadata CSV in '{data_dir}'.\n"
-            f"Found the following items in '{data_dir}': {item_names}\n"
-            f"Please check the folder name or pass --data-dir <path> explicitly."
-        )
+    kaggle_items = [i.name for i in kaggle_input.iterdir()] if kaggle_input.exists() else []
+
+    raise FileNotFoundError(
+        f"Could not find HAM10000 metadata CSV in '{data_dir}'.\n"
+        f"Folders in '/kaggle/input': {kaggle_items}\n"
+        f"NOTE: You added a Notebook ('kmader') rather than the HAM10000 Dataset!\n"
+        f"-> In Kaggle, click '+ Add Input' -> search for 'Skin Cancer MNIST: HAM10000' -> click Add."
+    )
 
 
 def find_image_files(data_dir: Path) -> dict:
@@ -82,8 +94,20 @@ def find_image_files(data_dir: Path) -> dict:
     image_paths = {}
     valid_exts = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
     for p in Path(data_dir).rglob("*"):
+        if "notebooks" in str(p):
+            continue
         if p.suffix in valid_exts and p.is_file():
             image_paths[p.stem] = str(p)
+
+    # Fallback to search /kaggle/input if data_dir had no images
+    kaggle_input = Path("/kaggle/input")
+    if len(image_paths) == 0 and kaggle_input.exists() and data_dir != kaggle_input:
+        for p in kaggle_input.rglob("*"):
+            if "notebooks" in str(p):
+                continue
+            if p.suffix in valid_exts and p.is_file():
+                image_paths[p.stem] = str(p)
+
     return image_paths
 
 

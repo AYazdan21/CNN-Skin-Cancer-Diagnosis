@@ -16,7 +16,7 @@ KAGGLE_INPUT_DIR = Path("/kaggle/input")
 if KAGGLE_INPUT_DIR.exists():
     # Running inside Kaggle
     BASE_DIR = Path("/kaggle/working")
-    subdirs = [d for d in KAGGLE_INPUT_DIR.iterdir() if d.is_dir()]
+    subdirs = [d for d in KAGGLE_INPUT_DIR.iterdir() if d.is_dir() and d.name.lower() != "notebooks"]
     # Case-insensitive match for ham10000, skin, or isic
     matched = [d for d in subdirs if any(k in d.name.lower() for k in ["ham10000", "skin", "isic"])]
     if matched:
